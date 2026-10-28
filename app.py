@@ -21,7 +21,7 @@ ml_model, tfidf = load_ml_components()
 def analyze_with_gemini(api_key, text):
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel("gemini-2.5-flash")
+        model = genai.GenerativeModel("gemini-3.8-flash")
         prompt = f"""
         Analyze this message for social engineering, phishing, or scam tactics:
         "{text}"
