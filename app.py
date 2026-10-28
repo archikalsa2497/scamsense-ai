@@ -33,7 +33,6 @@ def analyze_with_gemini(api_key, text):
         ADVICE: [One actionable sentence for the user]
         """
         
-        # Retry logic for handling 429 rate limits gracefully
         response = None
         for attempt in range(2):
             try:
@@ -41,7 +40,7 @@ def analyze_with_gemini(api_key, text):
                 break
             except Exception as e:
                 if "429" in str(e) and attempt == 0:
-                    time.sleep(8)
+                    time.sleep(6)
                     continue
                 raise e
 
@@ -58,15 +57,25 @@ def analyze_with_gemini(api_key, text):
     except Exception as e:
         err_msg = str(e)
         if "429" in err_msg:
-            err_msg = "Rate limit reached (Free tier). Please wait 30 seconds and try again."
+            err_msg = "Rate limit reached. Please wait 15-20 seconds before analyzing another message."
         return {"threat": "Error", "tactics": ["API Error"], "advice": err_msg}
+
+# Automatically fetch API Key from Streamlit Secrets if available
+active_api_key = st.secrets.get("GEMINI_API_KEY", "")
 
 st.title("🛡️ ScamSense AI — Threat & Fraud Detection Engine")
 st.markdown("A dual-layer security engine: Rapid ML classification + Generative AI psychological reasoning.")
 
 with st.sidebar:
     st.header("⚙️ Settings")
-    user_api_key = st.text_input("Gemini API Key", type="password", help="Get your API key from Google AI Studio")
+    if active_api_key:
+        st.success("✅ System API Key configured (Ready to use)")
+        custom_key = st.text_input("Override Gemini API Key (Optional)", type="password")
+        if custom_key.strip():
+            active_api_key = custom_key.strip()
+    else:
+        active_api_key = st.text_input("Gemini API Key", type="password", help="Enter API Key to enable GenAI deep reasoning.")
+        
     st.markdown("---")
     st.markdown("### Architecture Flow:")
     st.markdown("1. **TF-IDF + Logistic Reg:** First-pass speed filter.")
@@ -92,9 +101,9 @@ with tabs[0]:
             col2.metric("ML Heuristic Verdict", verdict)
             
             genai_res = None
-            if user_api_key:
+            if active_api_key:
                 with st.spinner("Analyzing psychological vectors with Gemini 3.8 Flash..."):
-                    genai_res = analyze_with_gemini(user_api_key, msg_input)
+                    genai_res = analyze_with_gemini(active_api_key, msg_input)
                     col3.metric("GenAI Threat Rating", genai_res.get("threat", "Unknown"))
             else:
                 col3.metric("GenAI Threat Rating", "Unknown")
@@ -106,9 +115,9 @@ with tabs[0]:
                 tactics = ", ".join(genai_res.get("tactics", []))
                 st.write(f"**Identified Tactics:** {tactics if tactics else 'None'}")
                 st.info(f"💡 **Security Recommendation:** {genai_res.get('advice')}")
-            elif not user_api_key:
-                st.write("**Identified Tactics:** API Key Not Provided")
-                st.info("💡 **Security Tip:** Add your Gemini API Key in the sidebar for complete in-depth threat analysis.")
+            elif not active_api_key:
+                st.write("**Identified Tactics:** API Key Not Configured")
+                st.info("💡 **Security Tip:** Add Gemini API Key to view deep explainable insights.")
             else:
                 st.error(f"GenAI Analysis failed: {genai_res.get('advice')}")
 
