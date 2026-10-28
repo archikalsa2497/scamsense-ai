@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import joblib
 import os
+import time
 import google.generativeai as genai
 
 st.set_page_config(page_title="ScamSense AI", page_icon="🛡️", layout="wide")
@@ -21,7 +22,7 @@ ml_model, tfidf = load_ml_components()
 def analyze_with_gemini(api_key, text):
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel("gemini-1.5-flash")
+        model = genai.GenerativeModel("gemini-3.8-flash")
         prompt = f"""
         Analyze this message for social engineering, phishing, or scam tactics:
         "{text}"
@@ -31,7 +32,19 @@ def analyze_with_gemini(api_key, text):
         TACTICS: [Comma separated tactics, e.g., Urgency, Financial Lure, OTP Request, None]
         ADVICE: [One actionable sentence for the user]
         """
-        response = model.generate_content(prompt)
+        
+        # Retry logic for handling 429 rate limits gracefully
+        response = None
+        for attempt in range(2):
+            try:
+                response = model.generate_content(prompt)
+                break
+            except Exception as e:
+                if "429" in str(e) and attempt == 0:
+                    time.sleep(8)
+                    continue
+                raise e
+
         lines = response.text.strip().split('\n')
         result = {"threat": "Unknown", "tactics": [], "advice": "No specific advice generated."}
         for line in lines:
@@ -43,18 +56,21 @@ def analyze_with_gemini(api_key, text):
                 result["advice"] = line.replace("ADVICE:", "").strip()
         return result
     except Exception as e:
-        return {"threat": "Error", "tactics": ["API Error"], "advice": str(e)}
+        err_msg = str(e)
+        if "429" in err_msg:
+            err_msg = "Rate limit reached (Free tier). Please wait 30 seconds and try again."
+        return {"threat": "Error", "tactics": ["API Error"], "advice": err_msg}
 
 st.title("🛡️ ScamSense AI — Threat & Fraud Detection Engine")
 st.markdown("A dual-layer security engine: Rapid ML classification + Generative AI psychological reasoning.")
 
 with st.sidebar:
     st.header("⚙️ Settings")
-    user_api_key = st.text_input("Gemini API Key", type="password", help="Get a free API key from aistudio.google.com")
+    user_api_key = st.text_input("Gemini API Key", type="password", help="Get your API key from Google AI Studio")
     st.markdown("---")
     st.markdown("### Architecture Flow:")
     st.markdown("1. **TF-IDF + Logistic Reg:** First-pass speed filter.")
-    st.markdown("2. **Gemini 2.5 Flash:** Zero-shot psychological vulnerability parsing & advice.")
+    st.markdown("2. **Gemini 3.8 Flash:** Zero-shot psychological vulnerability parsing & advice.")
 
 tabs = st.tabs(["🔍 Single Message Scanner", "📁 Batch CSV Scanner"])
 
@@ -77,7 +93,7 @@ with tabs[0]:
             
             genai_res = None
             if user_api_key:
-                with st.spinner("Analyzing psychological vectors with Gemini 2.5 Flash..."):
+                with st.spinner("Analyzing psychological vectors with Gemini 3.8 Flash..."):
                     genai_res = analyze_with_gemini(user_api_key, msg_input)
                     col3.metric("GenAI Threat Rating", genai_res.get("threat", "Unknown"))
             else:
