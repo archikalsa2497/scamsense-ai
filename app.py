@@ -110,7 +110,8 @@ with tabs[1]:
         else:
             if st.button("Start Batch Processing"):
                 with st.spinner("બેચ સ્કેનિંગ ચાલુ છે..."):
-                    vectors = tfidf.transform(df_upload["message"].astype(str))
+                    cleaned_messages = df_upload["message"].fillna("").astype(str)
+                    vectors = tfidf.transform(cleaned_messages)
                     probabilities = ml_model.predict_proba(vectors)[:, 1]
                     df_upload["Scam_Probability"] = (probabilities * 100).round(2)
                     df_upload["Verdict"] = ["High Risk" if p > 0.5 else "Low Risk" for p in probabilities]
